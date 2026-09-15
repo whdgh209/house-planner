@@ -258,10 +258,12 @@ function writeSensitivity_(sh) {
     /* 88 */ ['지표1. 만기 상환 버퍼율', '=IF(NOT(ISNUMBER($B$87)),"-",IF($B$86=0,"원금 전액 분할상환 완료",$B$87/$B$86))', '100% = 딱 맞음, 120% 이상 권장', 'out', '0.0%'],
     /* 89 */ ['지표2. 최종 판정',
               '=IF(NOT(ISNUMBER($B$87)),"입력 확인 필요",' +
-              'IFS(AND($B$87>=$B$86*1.2,$B$92>=0),"✅ 상환 여유 충분",' +
-              'AND($B$87>=$B$86,$B$92>=0),"⚠ 상환 가능 (주의 요망)",' +
+              'IFS(N($B$86)<=0,"원금 전액 분할상환 완료",' +
+              'AND($B$87>=$B$86*1.2,$B$106>=$B$86),"✅ 상환 여유 충분",' +
+              'AND($B$87>=$B$86*1.2,$B$106<$B$86),"⚠ 금액은 충분 — 성과급 의존 주의",' +
+              '$B$87>=$B$86,"⚠ 상환 가능 (주의 요망)",' +
               'TRUE,"❌ 상환 능력 부족 (증여 추정 위험)"))',
-              '기본급 수지 적자면 무조건 부족 판정', 'out', null],
+              '성과급 0% 시나리오(B106)까지 같이 보고 내린 판정', 'out', null],
     /* 90 */ ['소득 대비 차입 배수', '=IFERROR($B$38/$B$62,"")', '연 세후소득의 몇 배를 빌리는가', 'calc', FMT.TIMES],
     /* 91 */ ['총부채 상환비율 (생활 DSR)', '=IFERROR(($B$63+$B$64)/$B$62,"")', '세후소득 대비 부채상환 비중', 'calc', FMT.PCT1],
     /* 92 */ ['월 기본급 기준 수지', '=$B$69', '성과급 없이도 흑자여야 안전', 'calc', FMT.WON],
@@ -409,15 +411,16 @@ function applyValidation_(sh) {
 function applyConditionalFormat_(sh) {
   var rules = [];
 
-  // 최종 판정 B89
+  // 최종 판정 B89 — 판정 문구에 '충분'과 '주의'가 함께 들어갈 수 있어
+  // (예: "금액은 충분 — 성과급 의존 주의") 앞머리 이모지로 판별한다.
   rules.push(SpreadsheetApp.newConditionalFormatRule()
-    .whenTextContains('충분').setBackground('#c6efce').setFontColor('#006100')
+    .whenTextStartsWith('✅').setBackground('#c6efce').setFontColor('#006100')
     .setRanges([sh.getRange('B89'), sh.getRange('D106:D108')]).build());
   rules.push(SpreadsheetApp.newConditionalFormatRule()
-    .whenTextContains('주의').setBackground('#ffeb9c').setFontColor('#9c6500')
+    .whenTextStartsWith('⚠').setBackground('#ffeb9c').setFontColor('#9c6500')
     .setRanges([sh.getRange('B89'), sh.getRange('D106:D108')]).build());
   rules.push(SpreadsheetApp.newConditionalFormatRule()
-    .whenTextContains('부족').setBackground('#ffc7ce').setFontColor('#9c0006')
+    .whenTextStartsWith('❌').setBackground('#ffc7ce').setFontColor('#9c0006')
     .setRanges([sh.getRange('B89'), sh.getRange('D106:D108')]).build());
 
   // 버퍼율

@@ -216,10 +216,12 @@ put(88, '지표1. 만기 상환 버퍼율',
     '100% = 딱 맞음, 120%↑ 권장', 'out', PCT1)
 put(89, '지표2. 최종 판정',
     '=IF(NOT(ISNUMBER($B$87)),"입력 확인 필요",'
-    'IF(AND($B$87>=$B$86*1.2,$B$92>=0),"✅ 상환 여유 충분",'
-    'IF(AND($B$87>=$B$86,$B$92>=0),"⚠ 상환 가능 (주의 요망)",'
-    '"❌ 상환 능력 부족 (증여 추정 위험)")))',
-    '기본급 수지 적자면 무조건 부족 판정', 'out')
+    'IF(N($B$86)<=0,"원금 전액 분할상환 완료",'
+    'IF(AND($B$87>=$B$86*1.2,$B$106>=$B$86),"✅ 상환 여유 충분",'
+    'IF(AND($B$87>=$B$86*1.2,$B$106<$B$86),"⚠ 금액은 충분 — 성과급 의존 주의",'
+    'IF($B$87>=$B$86,"⚠ 상환 가능 (주의 요망)",'
+    '"❌ 상환 능력 부족 (증여 추정 위험)")))))',
+    '성과급 0% 시나리오(B106)까지 같이 보고 내린 판정', 'out')
 put(90, '소득 대비 차입 배수', '=IFERROR($B$38/$B$62,"")', '연 세후소득의 몇 배를 빌리는가', 'calc', TIMES)
 put(91, '총부채 상환비율 (생활 DSR)', '=IFERROR(($B$63+$B$64)/$B$62,"")', '세후소득 대비 부채상환 비중', 'calc', PCT1)
 put(92, '월 기본급 기준 수지', '=$B$69', '성과급 없이도 흑자여야 안전', 'calc', WON)
@@ -369,16 +371,15 @@ GREEN = PatternFill('solid', start_color='C6EFCE', end_color='C6EFCE')
 AMBER = PatternFill('solid', start_color='FFEB9C', end_color='FFEB9C')
 RED   = PatternFill('solid', start_color='FFC7CE', end_color='FFC7CE')
 
+# 판정 문구에 '충분'과 '주의'가 함께 들어가는 경우가 있어(예: "금액은 충분 —
+# 성과급 의존 주의") 키워드 검색으로는 색이 뒤집힌다. 앞머리 이모지로 판별한다.
 for rng in ['B89', 'D106:D108']:
-    ws.conditional_formatting.add(rng, FormulaRule(
-        formula=['ISNUMBER(SEARCH("충분",{0}))'.format(rng.split(':')[0])],
-        fill=GREEN, font=Font(color='006100', bold=True)))
-    ws.conditional_formatting.add(rng, FormulaRule(
-        formula=['ISNUMBER(SEARCH("주의",{0}))'.format(rng.split(':')[0])],
-        fill=AMBER, font=Font(color='9C6500', bold=True)))
-    ws.conditional_formatting.add(rng, FormulaRule(
-        formula=['ISNUMBER(SEARCH("부족",{0}))'.format(rng.split(':')[0])],
-        fill=RED, font=Font(color='9C0006', bold=True)))
+    first = rng.split(':')[0]
+    for emoji, fill, color in [('✅', GREEN, '006100'), ('⚠', AMBER, '9C6500'),
+                               ('❌', RED, '9C0006')]:
+        ws.conditional_formatting.add(rng, FormulaRule(
+            formula=['LEFT({0},1)="{1}"'.format(first, emoji)],
+            fill=fill, font=Font(color=color, bold=True)))
 
 for rng in ['B88', 'C106:C108']:
     ws.conditional_formatting.add(rng, CellIsRule(

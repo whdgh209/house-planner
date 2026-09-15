@@ -130,13 +130,13 @@ SRC = {2: '$B$6', 3: '$B$7', 4: '$B$8'}          # 열 -> 성과급 비율 입�
 
 rows = [
     (20, '성과급 비율', '={s}', PCT, 'calc'),
-    (21, '연간 세후 소득 (1년차)', '=ROUND($B$5*12*(1+{s}),0)', WON, 'calc'),
-    (22, '연간 잉여 (1년차)', '=ROUND($B$5*12*(1+{s}),0)-$B$16', WON, 'calc'),
-    (23, '차용기간 누적 잉여', '=INDEX({col}$51:{col}$60,$B$12)', PLAIN, 'out'),
+    (21, '연간 세후 소득 (1년차, 원)', '=ROUND($B$5*12*(1+{s}),0)', PLAIN, 'calc'),
+    (22, '연간 잉여 (1년차, 원)', '=ROUND($B$5*12*(1+{s}),0)-$B$16', PLAIN, 'calc'),
+    (23, '차용기간 누적 잉여 (원)', '=INDEX({col}$51:{col}$60,$B$12)', PLAIN, 'out'),
     (24, '버퍼율  (누적 ÷ 원금)', '=IFERROR({col}23/$B$11,"")', PCT, 'out'),
-    (25, '판정', '=IF({col}24>=1.2,"✅ 여유 충분",'
-                 'IF({col}24>=1,"⚠ 가능(주의)","❌ 부족"))', None, 'out'),
-    (26, '안전한 최대 차용액', '=MAX(0,ROUND({col}23/1.2,-6))', PLAIN, 'out'),
+    (25, '판정', '=IF(N($B$11)<=0,"—",IF({col}24>=1.2,"✅ 여유 충분",'
+                 'IF({col}24>=1,"⚠ 가능(주의)","❌ 부족")))', None, 'out'),
+    (26, '안전한 최대 차용액 (원)', '=MAX(0,ROUND({col}23/1.2,-6))', PLAIN, 'out'),
 ]
 for r, label, tmpl, fmt, style in rows:
     ws.cell(r, 1, label).font = Font(name=ARIAL, bold=(style == 'out'))
@@ -157,13 +157,14 @@ note(26, '그 시나리오에서 버퍼 120%가 나오는 금액')
 
 # ── 최종 판정 28 ────────────────────────────────────────────────────────
 put(28, '★ 최종 판정',
-        '=IF(OR($B$6>$C$20,$C$20>$D$20),"⚠ 성과급 비율을 최소 ≤ 예상 ≤ 최대 순서로 입력하세요",'
+        '=IF(N($B$11)<=0,"⚠ 차용 원금(B11)을 입력하세요",'
+        'IF(OR($B$20>$C$20,$C$20>$D$20),"⚠ 성과급 비율을 최소 ≤ 예상 ≤ 최대 순서로 입력하세요",'
         'IF($B$24>=1.2,"✅ 어떤 경우에도 여유 충분",'
         'IF($B$24>=1,"✅ 성과급이 최소여도 상환 가능",'
         'IF($C$24>=1.2,"⚠ 예상대로면 충분 — 성과급 부진 시 위험",'
         'IF($C$24>=1,"⚠ 예상 기준 겨우 가능 (여유 없음)",'
         'IF($D$24>=1,"❌ 성과급이 최대로 나와야만 가능 — 사실상 부족",'
-        '"❌ 상환 능력 부족 (증여 추정 위험)"))))))',
+        '"❌ 상환 능력 부족 (증여 추정 위험)")))))))',
         '세 시나리오를 모두 보고 내린 판정', 'out', None, big=True, span=True)
 ws.row_dimensions[28].height = 28
 ws['B28'].alignment = Alignment(horizontal='center', vertical='center')
@@ -177,8 +178,9 @@ put(32, '월 수지 — 성과급 예상일 때',
         '=$B$5*(1+$B$7)-$B$9-$B$10-ROUND($B$11*$B$13,0)/12',
         None, 'calc', WON, span=True)
 put(33, '원금을 다 갚으려면 필요한 기간',
-        '=IF(COUNTIF($C$51:$C$60,">="&$B$11)=0,"10년 안에는 불가",'
-        '(11-COUNTIF($C$51:$C$60,">="&$B$11))&"년차")',
+        '=IF(N($B$11)<=0,"—",'
+        'IF(COUNTIF($C$51:$C$60,">="&$B$11)=0,"10년 안에는 불가",'
+        '(11-COUNTIF($C$51:$C$60,">="&$B$11))&"년차"))',
         '예상 시나리오 기준', 'out', None, span=True)
 
 # ── 증여세 35~39 ────────────────────────────────────────────────────────
@@ -190,8 +192,8 @@ put(37, '증여세 과세 여부',
         '=IF($B$36>=10000000,"❌ 과세 대상 — 이익 전액이 증여재산가액",'
         '"✅ 비과세 (연 1,000만원 미만)")',
         '1,000만원 이상이면 초과분 아닌 전액 과세', 'risk', None, span=True)
-put(38, '무이자로 빌릴 수 있는 최대 원금', LIMIT,
-        '1,000만원 ÷ 4.6% — 고정값', 'calc', WON, span=True)
+put(38, '무이자로 빌릴 수 있는 최대 원금', '=ROUND(10000000/0.046,0)',
+        '1,000만원 ÷ 4.6% = 217,391,304원', 'calc', WON, span=True)
 put(39, '한도 소진율', '=IF($B$13>0,"-",IFERROR($B$11/$B$38,""))',
         '100% 넘으면 증여세 과세 구간', 'risk', PCT, span=True)
 
@@ -315,16 +317,15 @@ dv_rate = DataValidation(type='decimal', operator='between', formula1=0, formula
 ws.add_data_validation(dv_rate); dv_rate.add(ws['B13']); dv_rate.add(ws['B14'])
 
 # ── 조건부 서식 ─────────────────────────────────────────────────────────
-for kw, fill, color in [('충분', GREEN, '006100'), ('가능', AMBER, '9C6500'),
-                        ('부족', RED, '9C0006'), ('위험', AMBER, '9C6500')]:
+# 판정 문구에는 '가능'과 '부족'이 함께 들어가는 경우가 있어(예: "최대로 나와야만
+# 가능 — 사실상 부족") 키워드 검색으로는 색이 뒤집힌다. 앞머리 이모지로 판별한다.
+for emoji, fill, color in [('✅', GREEN, '006100'), ('⚠', AMBER, '9C6500'),
+                           ('❌', RED, '9C0006')]:
     ws.conditional_formatting.add('B25:D25', FormulaRule(
-        formula=['ISNUMBER(SEARCH("{0}",B25))'.format(kw)],
+        formula=['LEFT(B25,1)="{0}"'.format(emoji)],
         fill=fill, font=Font(color=color, bold=True)))
-for kw, fill, color in [('충분', GREEN, '006100'), ('가능', GREEN, '006100'),
-                        ('위험', AMBER, '9C6500'), ('여유 없음', AMBER, '9C6500'),
-                        ('부족', RED, '9C0006')]:
     ws.conditional_formatting.add('B28', FormulaRule(
-        formula=['ISNUMBER(SEARCH("{0}",$B$28))'.format(kw)],
+        formula=['LEFT($B$28,1)="{0}"'.format(emoji)],
         fill=fill, font=Font(color=color, bold=True, size=14)))
 
 ws.conditional_formatting.add('B24:D24', CellIsRule(
