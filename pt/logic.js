@@ -64,3 +64,39 @@ export function alertOf(st) {
   if (st.remaining <= 2) return { level: 2, text: `잔여 ${st.remaining}회 · 재등록 안내` };
   return null;
 }
+
+// ---------- 캘린더 ----------
+export const toMin = t => { const [h, m] = (t || '0:0').split(':').map(Number); return h * 60 + m; };
+export const fromMin = n => `${pad(Math.floor(n / 60))}:${pad(n % 60)}`;
+export const weekday = s => parse(s).getDay();
+export const weekStart = s => addDays(s, -((weekday(s) + 6) % 7)); // 월요일 시작
+export const DEFAULT_DURATION = 50;
+export const endMin = s => toMin(s.time) + (s.duration || DEFAULT_DURATION);
+
+// 예약했는데 수업 시간이 지나도록 일지를 안 쓴 수업
+export function isOverdue(s, now = new Date()) {
+  if (s.status !== 'booked') return false;
+  const t = fmt(now);
+  if (s.date !== t) return s.date < t;
+  return !!s.time && endMin(s) <= now.getHours() * 60 + now.getMinutes();
+}
+
+export const nextBooking = (sessions, t = today()) =>
+  sessions.filter(s => s.status === 'booked' && s.date >= t)
+    .sort((a, b) => a.date.localeCompare(b.date) || toMin(a.time) - toMin(b.time))[0] || null;
+
+// 공휴일 (매년 추가 필요)
+export const HOLIDAYS = {
+  '2026-01-01': '신정', '2026-02-16': '설날 연휴', '2026-02-17': '설날', '2026-02-18': '설날 연휴',
+  '2026-03-01': '삼일절', '2026-03-02': '대체공휴일', '2026-05-05': '어린이날', '2026-05-24': '부처님오신날',
+  '2026-05-25': '대체공휴일', '2026-06-03': '지방선거', '2026-06-06': '현충일', '2026-08-15': '광복절',
+  '2026-08-17': '대체공휴일', '2026-09-24': '추석 연휴', '2026-09-25': '추석', '2026-09-26': '추석 연휴',
+  '2026-10-01': '국군의날', '2026-10-03': '개천절', '2026-10-05': '대체공휴일', '2026-10-09': '한글날',
+  '2026-12-25': '성탄절',
+  '2027-01-01': '신정', '2027-02-06': '설날 연휴', '2027-02-07': '설날', '2027-02-08': '설날 연휴',
+  '2027-02-09': '대체공휴일', '2027-03-01': '삼일절', '2027-05-05': '어린이날', '2027-05-13': '부처님오신날',
+  '2027-06-06': '현충일', '2027-08-15': '광복절', '2027-08-16': '대체공휴일', '2027-09-14': '추석 연휴',
+  '2027-09-15': '추석', '2027-09-16': '추석 연휴', '2027-10-01': '국군의날', '2027-10-03': '개천절',
+  '2027-10-04': '대체공휴일', '2027-10-09': '한글날', '2027-10-11': '대체공휴일', '2027-12-25': '성탄절',
+  '2027-12-27': '대체공휴일',
+};

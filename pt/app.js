@@ -1,130 +1,14 @@
-import { createStore } from './store.js';
-import { formatKakao, parseKakao, setsText, volume, exerciseLabel } from './kakao.js';
+import { formatKakao, parseKakao, setsText } from './kakao.js';
 import * as L from './logic.js';
 import { SEED_EXERCISES } from './exercises.js';
+import {
+  $app, $tabs, store, db, ui, esc, newId, list, byName, $, $$, val, num, toast, settings, save, remove,
+  gymOf, gymColor, shareUrl, displayName, badgeFor, header, copyText, shareText, exerciseListHtml, sessionCard,
+} from './core.js';
+import { calendarEnter, bookingForm, eventForm } from './calendar.js';
+import { COLS } from './store.js';
 
-const $app = document.getElementById('app');
-const $tabs = document.getElementById('tabs');
-const store = createStore();
-const db = () => store.data;
 let authState = 'loading', authUser = null;
-const ui = { memberFilter: 'all', feedFilter: 'all', feedLimit: 30 };
-
-// ---------- helpers ----------
-const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
-const ALPHA = 'abcdefghijkmnopqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789';
-const newId = (n = 20) => [...crypto.getRandomValues(new Uint8Array(n))].map(x => ALPHA[x % ALPHA.length]).join('');
-const list = col => [...db()[col].values()];
-const byName = (a, b) => a.name.localeCompare(b.name, 'ko');
-const $ = (sel, root = $app) => root.querySelector(sel);
-const $$ = (sel, root = $app) => [...root.querySelectorAll(sel)];
-const val = id => document.getElementById(id)?.value.trim() ?? '';
-const num = id => { const v = parseFloat(val(id)); return Number.isFinite(v) ? v : null; };
-
-let toastTimer;
-function toast(msg) {
-  const t = document.getElementById('toast');
-  t.textContent = msg; t.classList.add('show');
-  clearTimeout(toastTimer); toastTimer = setTimeout(() => t.classList.remove('show'), 2200);
-}
-store.onError = e => toast(`저장 실패: ${e.code || e.message}`);
-
-const DEFAULTS = { closing: true, daysPerSession: 4 };
-const settings = () => ({ ...DEFAULTS, ...(db().settings.get('main') || {}) });
-
-// 저장하면 공유 페이지(회원용 사본)도 함께 갱신
-function save(col, obj) {
-  obj.updatedAt = Date.now();
-  obj.createdAt ??= Date.now();
-  db()[col].set(obj.id, obj);
-  store.put(col, obj);
-  const mid = col === 'members' ? obj.id : obj.memberId;
-  if (mid) syncShare(mid);
-}
-function remove(col, id) {
-  const obj = db()[col].get(id);
-  db()[col].delete(id);
-  store.del(col, id);
-  if (obj?.memberId) syncShare(obj.memberId);
-}
-
-const gymOf = m => db().gyms.get(m?.gymId);
-const gymColor = m => gymOf(m)?.color || '#9aa3b5';
-const shareUrl = m => (m?.share?.enabled && m.share.token ? new URL(`m.html#${m.share.token}`, location.href).href : '');
-const displayName = n => (n.length >= 3 ? n.slice(1) : n);
-
-function badgeFor(st) {
-  const cls = st.state === 'active' ? (st.daysLeft <= 7 || st.remaining <= 2 ? 'warn' : '') : st.state === 'none' ? 'gray' : 'danger';
-  return `<span class="badge ${cls}">${esc(L.statusText(st))}</span>`;
-}
-
-function header(title, { back, right = '' } = {}) {
-  return `<header class="bar">${back ? `<a class="back" href="${back}" aria-label="뒤로">‹</a>` : ''}<h1>${esc(title)}</h1>${right}</header>`;
-}
-
-async function copyText(text) {
-  try { await navigator.clipboard.writeText(text); }
-  catch {
-    const ta = Object.assign(document.createElement('textarea'), { value: text });
-    document.body.append(ta); ta.select(); document.execCommand('copy'); ta.remove();
-  }
-  toast('복사했어요. 카톡에 붙여넣기 하세요');
-}
-async function shareText(text) {
-  if (navigator.share) {
-    try { await navigator.share({ text }); return; } catch (e) { if (e.name === 'AbortError') return; }
-  }
-  copyText(text);
-}
-
-function exerciseListHtml(exs) {
-  if (!exs?.length) return '';
-  return `<ol class="ex-list">${exs.map(e => {
-    const extra = [setsText(e.sets), e.note].filter(Boolean).join(' · ');
-    return `<li>${esc(exerciseLabel(e))}${extra ? `<div class="note">${esc(extra)}</div>` : ''}</li>`;
-  }).join('')}</ol>`;
-}
-
-function sessionCard(s, { showMember = false } = {}) {
-  const m = db().members.get(s.memberId);
-  const md = L.memberData(db(), s.memberId);
-  const no = md.noOf.get(s.id);
-  const total = md.contractOf.get(s.id)?.count;
-  const vol = (s.exercises || []).reduce((t, e) => t + volume(e), 0);
-  return `<div class="card">
-    <a class="link" href="#/m/${s.memberId}/s/${s.id}" style="color:inherit;display:block">
-      <div class="between">
-        <div class="row">${showMember ? `<span class="dot" style="background:${esc(gymColor(m))}"></span><span class="name">${esc(m?.name || '(삭제된 회원)')}</span>` : ''}
-          <b>${esc(L.dateLabel(s.date))}</b></div>
-        <div class="row">${s.status === 'noshow' ? '<span class="badge danger">불참</span>' : ''}${no ? `<span class="badge gray">${no}${total ? `/${total}` : ''}회차</span>` : ''}</div>
-      </div>
-      ${s.title ? `<div class="muted">${esc(s.title)}</div>` : ''}
-      ${exerciseListHtml(s.exercises)}
-      ${vol ? `<div class="muted small" style="margin-top:4px">총 볼륨 ${vol.toLocaleString()}kg</div>` : ''}
-    </a>
-    ${s.status === 'done' && s.exercises?.length ? `<div class="btns" style="margin-bottom:0"><a class="btn sm" href="#/m/${s.memberId}/s/${s.id}/send">카톡 문구</a></div>` : ''}
-  </div>`;
-}
-
-// ---------- 공유(회원 보기) ----------
-function syncShare(mid) {
-  const m = db().members.get(mid);
-  if (!m?.share?.enabled || !m.share.token) return;
-  const md = L.memberData(db(), mid);
-  const st = md.status;
-  const next = null; // 2단계(캘린더)에서 다음 예약 표시
-  store.putShare(m.share.token, {
-    name: displayName(m.name),
-    gym: gymOf(m)?.name || '',
-    total: st.total ?? null, remaining: st.remaining ?? null, used: st.used ?? null,
-    start: st.contract?.start || null, end: st.contract?.end || null, next,
-    sessions: md.sessions.filter(L.counted).reverse().map(s => ({
-      date: s.date, no: md.noOf.get(s.id) || null, status: s.status, title: s.title || '',
-      exercises: (s.exercises || []).map(e => ({ name: e.name, nameEn: e.nameEn || '', note: e.note || '', sets: e.sets || [] })),
-    })),
-    updatedAt: Date.now(),
-  });
-}
 
 // ---------- pages ----------
 function loginPage() {
@@ -148,7 +32,9 @@ function home() {
   const alerts = members.map(m => ({ m, st: L.memberData(db(), m.id).status }))
     .map(x => ({ ...x, a: L.alertOf(x.st) })).filter(x => x.a)
     .sort((a, b) => b.a.level - a.a.level || byName(a.m, b.m));
-  const todays = list('sessions').filter(s => s.date === t);
+  const byTime = (a, b) => a.date.localeCompare(b.date) || L.toMin(a.time || '99:00') - L.toMin(b.time || '99:00');
+  const todays = list('sessions').filter(s => s.date === t).sort(byTime);
+  const overdue = list('sessions').filter(s => s.date < t && L.isOverdue(s)).sort(byTime);
   const d = new Date();
 
   let onboarding = '';
@@ -163,10 +49,27 @@ function home() {
         <span class="lv l${a.level}"></span>
         <div class="grow"><div class="row"><span class="dot" style="background:${esc(gymColor(m))}"></span><b>${esc(m.name)}</b></div><div class="muted">${esc(a.text)}</div></div>
         <span class="muted">›</span></a>`).join('') : '<div class="card muted">확인할 알림이 없어요 👍</div>'}
-    <h2>오늘 기록한 수업</h2>
-    ${todays.length ? todays.map(s => sessionCard(s, { showMember: true })).join('') : `<div class="card muted">아직 없어요. 수업이 끝나면 회원 화면에서 "수업 기록"을 눌러주세요.</div>`}
+    ${overdue.length ? `<h2>⚠ 기록 안 한 수업 (${overdue.length})</h2>${overdue.map(s => todayRow(s, true)).join('')}` : ''}
+    <h2>오늘 수업 ${todays.length ? `(${todays.length})` : ''}</h2>
+    ${todays.length ? todays.map(s => todayRow(s)).join('') : `<div class="card muted">오늘 예약된 수업이 없어요. <a href="#/calendar">캘린더</a>에서 예약하세요.</div>`}
     ${statsHtml()}
     ${members.length ? '<a class="btn primary fab" href="#/record" aria-label="수업 기록">＋</a>' : ''}`;
+}
+
+// 홈의 수업 한 줄: 예약이면 [기록], 완료면 [카톡]
+function todayRow(s, withDate = false) {
+  const m = db().members.get(s.memberId);
+  const md = L.memberData(db(), s.memberId);
+  const no = md.noOf.get(s.id);
+  const sub = s.status === 'booked' ? (L.isOverdue(s) ? '수업 시간이 지났어요 · 일지를 써주세요' : '예약')
+    : s.status === 'noshow' ? '불참 (회차 차감)' : `완료${no ? ` · ${no}회차` : ''}${s.exercises?.length ? ` · ${s.exercises.length}종목` : ''}`;
+  const action = s.status === 'booked' ? `<a class="btn sm primary" href="#/m/${s.memberId}/s/${s.id}">기록</a>`
+    : s.status === 'done' && s.exercises?.length ? `<a class="btn sm" href="#/m/${s.memberId}/s/${s.id}/send">카톡</a>` : '';
+  return `<div class="card row">
+    <span class="time-col">${withDate ? `<small>${esc(L.shortDate(s.date))}</small>` : ''}${esc(s.time || '-')}</span>
+    <span class="dot" style="background:${esc(gymColor(m))}"></span>
+    <a class="grow" href="#/m/${s.memberId}/s/${s.id}" style="color:inherit"><b>${esc(m?.name || '(삭제된 회원)')}</b><div class="muted small">${esc(sub)}</div></a>
+    ${action}</div>`;
 }
 
 function statsHtml() {
@@ -228,7 +131,7 @@ function feed() {
     <div id="list"></div>`;
   const draw = () => {
     const q = (ui.feedQ = val('q')).toLowerCase();
-    let items = list('sessions').sort((a, b) => b.date.localeCompare(a.date) || (b.createdAt || 0) - (a.createdAt || 0));
+    let items = list('sessions').filter(s => s.status !== 'booked').sort((a, b) => b.date.localeCompare(a.date) || (b.createdAt || 0) - (a.createdAt || 0));
     if (ui.feedFilter !== 'all') items = items.filter(s => db().members.get(s.memberId)?.gymId === ui.feedFilter);
     if (q) items = items.filter(s => {
       const m = db().members.get(s.memberId);
@@ -278,7 +181,12 @@ function memberDetail(id, tab = 'summary') {
   if (!m) { $app.innerHTML = `${header('회원', { back: '#/members' })}<p class="empty">회원을 찾을 수 없어요</p>`; return; }
   const md = L.memberData(db(), id);
   const st = md.status;
-  const tabs = [['summary', '요약'], ['sessions', `운동일지 ${md.sessions.length || ''}`], ['contracts', '계약'], ['share', '공유']];
+  const logs = md.sessions.filter(s => s.status !== 'booked');
+  const upcoming = md.sessions.filter(s => s.status === 'booked').sort((a, b) => a.date.localeCompare(b.date) || L.toMin(a.time) - L.toMin(b.time));
+  const next = L.nextBooking(md.sessions);
+  const tabs = [['summary', '요약'], ['sessions', `운동일지 ${logs.length || ''}`], ['contracts', '계약'], ['share', '공유']];
+  const upcomingHtml = upcoming.length ? `<h2>예정된 수업 (${upcoming.length})</h2><div class="card">${upcoming.map(s => `<a class="between" href="#/b/${s.id}" style="color:inherit;padding:5px 0">
+      <span>${esc(L.dateLabel(s.date))} ${esc(s.time || '')}</span>${L.isOverdue(s) ? '<span class="badge warn">기록 필요</span>' : '<span class="muted">›</span>'}</a>`).join('')}</div>` : '';
   let body = '';
 
   if (tab === 'summary') {
@@ -288,8 +196,9 @@ function memberDetail(id, tab = 'summary') {
         ${st.state === 'none' ? `<p class="muted">계약 정보가 없어요.</p><a class="btn primary block" href="#/m/${id}/c/new">계약 등록</a>` : `
         <div class="between"><div><div class="muted small">잔여 회차</div><div class="big">${Math.max(0, st.remaining)}<span class="muted" style="font-size:18px"> / ${st.total}회</span></div></div>${badgeFor(st)}</div>
         <div class="muted" style="margin-top:6px">${esc(L.shortDate(st.contract.start))} ~ ${esc(L.shortDate(st.contract.end))} (${esc(L.dday(st.daysLeft))})</div>`}
+        ${next ? `<div style="margin-top:6px">다음 수업 <b>${esc(L.dateLabel(next.date))} ${esc(next.time || '')}</b>${upcoming.length > 1 ? ` <span class="muted">외 ${upcoming.length - 1}건</span>` : ''}</div>` : ''}
       </div>
-      <a class="btn primary block" href="#/m/${id}/s/new">＋ 수업 기록</a>
+      <div class="btns"><a class="btn primary" href="#/m/${id}/s/new">＋ 수업 기록</a><a class="btn" href="#/b/new/m/${id}">수업 예약</a></div>
       <h2>회원 정보</h2>
       <div class="card">
         <div class="between"><span class="muted">센터</span><span>${esc(gymOf(m)?.name || '-')}${m.unit ? ` · ${esc(m.unit)}` : ''}</span></div>
@@ -301,7 +210,8 @@ function memberDetail(id, tab = 'summary') {
         <button class="btn" id="toggleEnd">${m.status === 'ended' ? '다시 진행 중으로' : '종료 처리'}</button></div>`;
   } else if (tab === 'sessions') {
     body = `<div class="btns"><a class="btn primary" href="#/m/${id}/s/new">＋ 수업 기록</a><a class="btn" href="#/m/${id}/import">카톡 기록 가져오기</a></div>
-      ${md.sessions.slice().reverse().map(s => sessionCard(s)).join('') || '<p class="empty">운동일지가 없어요</p>'}`;
+      ${upcomingHtml}${upcoming.length ? '<h2>운동일지</h2>' : ''}
+      ${logs.slice().reverse().map(s => sessionCard(s)).join('') || '<p class="empty">운동일지가 없어요</p>'}`;
   } else if (tab === 'contracts') {
     body = `<a class="btn primary block" href="#/m/${id}/c/new">＋ ${md.contracts.length ? '재등록' : '신규 계약'}</a><div style="height:10px"></div>
       ${md.contracts.slice().reverse().map(c => {
@@ -474,13 +384,17 @@ function sessionForm(mid, sid) {
   const src = isNew ? { id: newId(), memberId: mid, date: L.today(), status: 'done', title: '', memo: '', exercises: [] } : db().sessions.get(sid);
   if (!src) return memberDetail(mid, 'sessions');
   draft = structuredClone(src);
+  if (draft.status === 'booked') draft.status = 'done'; // 예약 → 수업 완료로 기록
   if (!draft.exercises.length) draft.exercises.push({ name: '', nameEn: '', note: '', sets: [] });
   const md = L.memberData(db(), mid);
-  const last = md.sessions.filter(s => s.id !== draft.id && s.exercises?.length).at(-1);
+  const last = md.sessions.filter(s => s.id !== draft.id && s.exercises?.length && s.date <= draft.date).at(-1);
 
   $app.innerHTML = `${header(`${m.name} · ${isNew ? '수업 기록' : '운동일지 수정'}`, { back: isNew ? `#/m/${mid}` : `#/m/${mid}/sessions` })}
     <div class="grid2">
       <div><label class="f">날짜</label><input id="date" type="date" value="${esc(draft.date)}"></div>
+      <div><label class="f">시간 (선택)</label><input id="time" type="time" step="300" value="${esc(draft.time)}"></div>
+    </div>
+    <div>
       <div><label class="f">수업</label><select id="status"><option value="done">수업 완료</option><option value="noshow">불참 (회차 차감)</option></select></div>
     </div>
     <div class="muted small" id="noInfo" style="margin-top:6px"></div>
@@ -577,7 +491,7 @@ function sessionForm(mid, sid) {
       if (!d) save('exercises', { id: newId(), name: x.name, nameEn: x.nameEn, part: '' });
       else if (!d.nameEn && x.nameEn) save('exercises', { ...d, nameEn: x.nameEn });
     }
-    save('sessions', { ...draft, date, status, title: val('title'), memo: val('memo'), exercises });
+    save('sessions', { ...draft, date, time: val('time'), status, title: val('title'), memo: val('memo'), exercises });
     return true;
   };
   $('#saveOnly').onclick = () => { if (doSave()) { toast('저장했어요'); location.hash = `#/m/${mid}/sessions`; } };
@@ -648,6 +562,17 @@ function settingsPage() {
       <label class="f">계약 기간 계산 (1회당 일수)</label><input id="dps" type="number" min="1" value="${s.daysPerSession}">
       <p class="muted small">10회 계약 = ${10 * s.daysPerSession}일</p>
     </div>
+    <h2>캘린더</h2>
+    <div class="card">
+      <div class="grid2">
+        <div><label class="f" style="margin-top:0">근무 시작</label><select id="ws">${[...Array(24)].map((_, h) => `<option value="${h}" ${h === s.workStart ? 'selected' : ''}>${h}시</option>`).join('')}</select></div>
+        <div><label class="f" style="margin-top:0">근무 끝</label><select id="we">${[...Array(24)].map((_, h) => `<option value="${h + 1}" ${h + 1 === s.workEnd ? 'selected' : ''}>${h + 1}시</option>`).join('')}</select></div>
+      </div>
+      <label class="f">쉬는 요일</label>
+      <div class="chips" id="offDays">${['월', '화', '수', '목', '금', '토', '일'].map((w, i) => `<button class="chip ${s.offDays.includes((i + 1) % 7) ? 'on' : ''}" data-wd="${(i + 1) % 7}">${w}</button>`).join('')}</div>
+      <label class="f">기본 수업 시간</label><select id="dur">${[30, 40, 50, 60, 90].map(n => `<option value="${n}" ${n === s.duration ? 'selected' : ''}>${n}분</option>`).join('')}</select>
+      <p class="muted small">근무 시간 밖이나 쉬는 요일에 예약하면 경고가 나와요. 특정 날짜 휴무는 캘린더 빈칸을 눌러 "휴무로 지정"하세요.</p>
+    </div>
     <h2>데이터</h2>
     <div class="card">
       <div class="btns" style="margin:0"><button class="btn" id="export">백업 파일 저장</button><label class="btn" style="margin:0">백업 불러오기<input type="file" id="import" accept=".json" hidden></label></div>
@@ -661,9 +586,18 @@ function settingsPage() {
     </div>`;
   $('#closing').onchange = e => save('settings', { ...s, id: 'main', closing: e.target.checked });
   $('#dps').onchange = () => { const v = num('dps'); if (v > 0) { save('settings', { ...s, id: 'main', daysPerSession: v }); settingsPage(); } };
+  const setS = patch => save('settings', { ...settings(), id: 'main', ...patch });
+  $('#ws').onchange = () => { const v = +val('ws'); if (v < settings().workEnd) setS({ workStart: v }); else toast('근무 끝보다 빨라야 해요'); };
+  $('#we').onchange = () => { const v = +val('we'); if (v > settings().workStart) setS({ workEnd: v }); else toast('근무 시작보다 늦어야 해요'); };
+  $('#dur').onchange = () => setS({ duration: +val('dur') });
+  $$('#offDays .chip').forEach(c => c.onclick = () => {
+    const w = +c.dataset.wd, cur = new Set(settings().offDays);
+    cur.has(w) ? cur.delete(w) : cur.add(w);
+    setS({ offDays: [...cur] }); c.classList.toggle('on');
+  });
   $('#export').onclick = () => {
     const out = { app: 'pt-note', version: 1, exportedAt: new Date().toISOString() };
-    for (const c of ['gyms', 'members', 'contracts', 'sessions', 'exercises', 'settings']) out[c] = list(c);
+    for (const c of COLS) out[c] = list(c);
     const a = Object.assign(document.createElement('a'), {
       href: URL.createObjectURL(new Blob([JSON.stringify(out, null, 1)], { type: 'application/json' })),
       download: `pt-note-backup-${L.today()}.json`,
@@ -675,9 +609,10 @@ function settingsPage() {
     try {
       const data = JSON.parse(await file.text());
       if (data.app !== 'pt-note') throw new Error('PT 노트 백업 파일이 아니에요');
-      const n = ['gyms', 'members', 'contracts', 'sessions', 'exercises', 'settings'].reduce((t, c) => t + (data[c]?.length || 0), 0);
+      const n = COLS.reduce((t, c) => t + (data[c]?.length || 0), 0);
       if (!confirm(`${n}개 항목을 불러올까요? 같은 항목은 덮어써요.`)) return;
-      for (const c of ['gyms', 'contracts', 'sessions', 'exercises', 'settings', 'members']) for (const o of data[c] || []) save(c, o);
+      // 회원을 마지막에 저장해야 공유 사본이 완성된 데이터로 만들어짐
+      for (const c of [...COLS.filter(c => c !== 'members'), 'members']) for (const o of data[c] || []) save(c, o);
       toast('불러왔어요');
     } catch (err) { toast(err.message); }
   };
@@ -757,6 +692,11 @@ function exercisesPage() {
 const routes = [
   [/^#\/(home)?$/, home, 'home'],
   [/^#\/record$/, recordPicker, 'home'],
+  [/^#\/calendar$/, calendarEnter, 'calendar'],
+  [/^#\/b\/new(?:\/(\d{4}-\d\d-\d\d))?(?:\/(\d\d:\d\d))?(?:\/m\/(\w+))?$/, (d, t, mid) => bookingForm('new', d, t, mid), 'calendar', true],
+  [/^#\/b\/(\w+)$/, id => bookingForm(id), 'calendar', true],
+  [/^#\/e\/new\/(\d{4}-\d\d-\d\d)\/(\d\d:\d\d|off)$/, (d, t) => eventForm('new', d, t), 'calendar', true],
+  [/^#\/e\/(\w+)$/, id => eventForm(id), 'calendar', true],
   [/^#\/feed$/, feed, 'feed'],
   [/^#\/members$/, members, 'members'],
   [/^#\/m\/new$/, () => memberForm(null), 'members', true],
@@ -782,7 +722,9 @@ function render(fromData = false) {
   if (fromData && isForm) return; // 입력 중인 화면은 다시 그리지 않음
   $tabs.hidden = false;
   $$('#tabs a', document).forEach(a => a.classList.toggle('on', a.dataset.tab === tab));
-  fn(...hash.match(re).slice(1).filter(x => x !== undefined));
+  $app.onclick = null; // 캘린더가 등록한 클릭 처리 해제
+  ui.fromData = fromData;
+  fn(...hash.match(re).slice(1));
   if (!fromData) window.scrollTo(0, 0);
 }
 

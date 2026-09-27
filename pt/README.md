@@ -47,9 +47,11 @@
 | 파일 | 역할 |
 |---|---|
 | `index.html`, `app.js` | 트레이너 화면 (홈, 일지, 회원, 설정) |
+| `calendar.js` | 캘린더 (주간·월간, 수업 예약, 개인 일정·휴무) |
+| `core.js` | 화면들이 함께 쓰는 저장·공유·도우미 |
 | `m.html`, `m.js` | 회원 보기 페이지 (읽기 전용) |
 | `store.js` | 저장소 (Firestore / 체험 모드) |
-| `logic.js` | 날짜, 계약, 잔여 회차 계산 |
+| `logic.js` | 날짜, 계약, 잔여 회차, 공휴일 계산 (공휴일은 매년 추가) |
 | `kakao.js` | 카톡 문구 만들기, 카톡 기록 읽기 |
 | `exercises.js` | 종목 사전 초기값 |
 | `firestore.rules` | Firestore 보안 규칙 |

@@ -37,6 +37,7 @@ async function main() {
       <div class="muted small">남은 수업</div>
       <div class="big">${Math.max(0, d.remaining)}<span class="muted" style="font-size:18px"> / ${d.total}회</span></div>
       <div class="muted" style="margin-top:6px">${esc(shortDate(d.start))} ~ ${esc(shortDate(d.end))}${daysLeft != null ? ` (${esc(daysLeft < 0 ? '기간 종료' : dday(daysLeft))})` : ''}</div>
+      ${d.next && d.next.date >= today() ? `<div style="margin-top:6px">다음 수업 <b>${esc(dateLabel(d.next.date))} ${esc(d.next.time)}</b></div>` : ''}
     </div>` : ''}
     <input class="search" id="q" type="search" placeholder="종목 검색 (예: 랫풀다운)">
     <div id="list"></div>
