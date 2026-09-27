@@ -109,43 +109,25 @@
 
 ## 4. 데이터 구조 (Firebase Firestore)
 
+컬렉션을 모두 최상위에 두고 `memberId`로 연결합니다. 데이터가 적어서(회원 수십 명, 수업 수백 건) 앱이 시작할 때 전부 불러와 기기에서 계산합니다.
+
 ```
-gyms/{gymId}
-  name, color, bankAccount, active
-
-members/{memberId}
-  name, gender, birth, phone, gymId, unit(동/호수)
-  status: active | ended
-  goal[], experience, medicalHistory, memo
-  share: { enabled, token }
-
-members/{memberId}/consultations/{id}      ← 상담일지
-  date, goal[], experience, medical, lifestyle, notes, wishes
-
-members/{memberId}/contracts/{id}          ← 계약(신규/재등록)
-  type: new | renew
-  startDate, endDate(자동: 10회 → +40일), sessionCount, price
-  agreed: { period, sign, cancel3h, refund }, signedAt
-
-members/{memberId}/sessions/{id}           ← 예약 + 세션일지 (같은 문서)
-  contractId, no(회차), start, durationMin
-  status: booked | done | noshow | canceled
-  title("등운동, 흉추들고")
-  exercises: [{ name, nameEn, note, sets?, reps?, weight? }]
-  trainerSign, memberSign (서명 이미지 데이터)
-
-exercises/{id}                             ← 종목 사전
-  name, nameEn, bodyPart, defaultNote
-
-shares/{token}                             ← 회원 공개용 사본 (민감정보 없음)
-  displayName, remaining, total, endDate, nextSession
-  sessions: [{ date, no, title, exercises:[{name,nameEn,note}] }]
+gyms/{id}        name, color, account, active
+members/{id}     name, gymId, gender, birth, phone, unit, status(active|ended)
+                 goals[], experience, medical, pain, lifestyle, wishes, memo   ← 상담일지 항목
+                 share: { enabled, token }
+contracts/{id}   memberId, type(new|renew), start, end, count, price, agreed{…}, memo
+sessions/{id}    memberId, date, status(done|noshow), title, memo(트레이너 전용)
+                 exercises: [{ name, nameEn, note, sets: [{kg, reps}] }]
+exercises/{id}   name, nameEn, part, defaultNote, fav
+settings/main    closing("입니다" 붙이기), daysPerSession(1회당 일수)
+shares/{token}   회원 공개용 사본: name, gym, total, remaining, start, end, sessions[]
 ```
 
 핵심 설계:
-- **예약과 세션일지를 같은 문서로** 둡니다. 캘린더에 예약하면 `booked`, 수업 후 기록하면 `done`이 되어 이중 입력이 없습니다.
-- **잔여 회차 = 계약 회차 − (done + noshow 개수)**. 3시간 전 규정에 따라 불참도 차감합니다.
-- **`shares`는 트레이너가 저장할 때마다 자동 갱신되는 요약 사본**입니다. 회원 링크는 이 문서만 읽을 수 있습니다.
+- **회차는 저장하지 않고 계산합니다.** 수업은 "그 날짜 이전에 시작한 가장 최근 계약"에 속하고, 완료와 불참(3시간 규정)이 차감됩니다. 날짜를 고치거나 계약을 추가해도 회차가 자동으로 맞춰집니다.
+- **`shares`는 저장할 때마다 자동 갱신되는 요약 사본**입니다. 회원 링크는 이 문서만 읽을 수 있습니다.
+- 2단계에서 캘린더를 붙일 때 `sessions.status`에 `booked`(예약)를 추가해 예약과 일지를 하나로 묶습니다.
 
 ### 보안 규칙 (요지)
 
@@ -180,10 +162,26 @@ match /{doc=**} {
 - 진행 중인 회원만 계약(시작일, 회차)과 지금까지 회차를 입력합니다. 종료 회원은 삼성노트에 그대로 둡니다.
 - 구글 캘린더의 다음 주 예약은 처음 한 번만 앱에 옮겨 입력합니다(또는 3단계 연동).
 
-## 7. 개발 단계
+## 7. Rappo 벤치마킹
+
+| Rappo 기능 | 반영 | 비고 |
+|---|---|---|
+| 세트별 kg·횟수 기록 | ✅ 1단계 | 선택 입력. "＋ 세트"를 누르면 이전 세트 값이 복사돼 빠르게 입력 |
+| 회원 리캡 자동 전달 | ✅ 1단계 | 카톡 문구 자동 생성과 회원 공유 링크, 종목별 코칭 포인트 |
+| 나의 운동(자주 쓰는 운동, 즐겨찾기) | ✅ 1단계 | 종목 사전 ★ 즐겨찾기, 자주 쓴 종목 빠른 추가, 지난 수업 불러오기 |
+| 일지 피드(검색, 회원별 모아보기) | ✅ 1단계 | 일지 탭: 회원·종목·메모 검색, 센터별 필터 |
+| My 수업기록(총 수업, 월평균, 월별 현황) | ✅ 1단계 | 홈 수업 현황: 월별 막대를 센터별 색으로 구분 (센터 정산용) |
+| 운동량(볼륨) 흐름 | 🔶 일부 | 수업별 총 볼륨 표시. 주간 그래프는 3단계 |
+| 스케줄(수업, 변경, OFF, 노쇼 색 구분) | ⏭ 2단계 | 캘린더에 상태별 색, 쉬는 날 표시 |
+| 근무시간 설정, 시간 막기 | ⏭ 2단계 | 캘린더에 근무 시간대만 표시 |
+| 회원 수업 신청·변경 | ⏸ 보류 | 회원 로그인이 필요. 지금은 카톡으로 조율 |
+| 눈바디(사진 비교) | ⏸ 보류 | 사진 저장소는 유료 요금제가 필요. 대신 3단계에 체중·체성분 숫자 기록 |
+| 채팅, 푸시 알림 | ✖ 제외 | 카톡으로 대체 |
+
+## 8. 개발 단계
 
 | 단계 | 내용 | 결과 |
 |---|---|---|
-| **1단계** | 센터·회원 관리, 계약(회차·기간 자동 계산), 세션일지 작성, 종목 자동완성, 카톡 문구 생성, 회원 공유 링크 | 카톡 보내기가 편해지고 회원이 기록을 볼 수 있음 |
-| **2단계** | 캘린더(주간·월간, 반복 예약, 센터 색상), 예약에서 일지로 연결, 홈 알림(미작성, 만료 임박), 상담일지 | 구글 캘린더와 삼성노트를 대체 |
-| **3단계** | 전자서명, 카톡 기록 가져오기, 세트·무게 성장 그래프, 백업 내보내기, (선택) 구글 캘린더 연동 | 완성도 향상 |
+| **1단계 ✅** | 센터·회원·상담 관리, 계약(회차·기간 자동 계산), 운동일지(세트·kg), 종목 사전·즐겨찾기, 카톡 문구 생성, 카톡 기록 가져오기, 회원 공유 링크, 일지 피드, 월별 수업 현황 | 카톡 보내기가 편해지고 회원이 기록을 볼 수 있음 |
+| **2단계** | 캘린더(주간·월간, 반복 예약, 센터 색상, 근무시간·OFF), 예약에서 일지로 연결, 미작성 일지 알림 | 구글 캘린더와 삼성노트를 대체 |
+| **3단계** | 전자서명, 종목별 무게·볼륨 성장 그래프, 체중·체성분 기록, (선택) 구글 캘린더 연동 | 완성도 향상 |

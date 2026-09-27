@@ -1,0 +1,23 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // ⚠ 아래 이메일을 트레이너 구글 계정으로 바꾸세요 (firebase-config.js의 TRAINER_EMAILS와 같게)
+    function isTrainer() {
+      return request.auth != null
+        && request.auth.token.email_verified == true
+        && request.auth.token.email in ['trainer@gmail.com'];
+    }
+
+    // 회원 공유 문서: 링크(토큰)를 아는 사람만 1건 읽기, 목록 조회는 불가
+    match /shares/{token} {
+      allow get: if true;
+      allow list: if false;
+      allow write: if isTrainer();
+    }
+
+    // 나머지 모든 데이터(회원 정보, 상담, 계약, 운동일지)는 트레이너만
+    match /{col}/{id} {
+      allow read, write: if isTrainer();
+    }
+  }
+}
