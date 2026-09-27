@@ -1,0 +1,23 @@
+// 종목 사전 초기값 (카톡 운동일지에서 쓰던 종목)
+export const SEED_EXERCISES = [
+  ['백익스텐션', 'back extension', '등'], ['케이블 암풀다운', 'cable arm pull down', '등'],
+  ['랫풀다운', 'lat pull down', '등'], ['원암 풀다운', 'one arm pull down', '등'],
+  ['케이블 로우로우', 'cable low row', '등'], ['케이블 하이로우', 'cable high row', '등'],
+  ['롱풀', 'long pull', '등'], ['덤벨 풀오버', 'dumbbell pullover', '등'],
+  ['루마니안 데드리프트', 'Romanian deadlift', '하체'], ['스티프 레그 데드리프트', 'stiff leg deadlift', '하체'],
+  ['리버스 런지', 'reverse lunge', '하체'], ['라잉 레그컬', 'lying leg curl', '하체'],
+  ['레그익스텐션', 'leg extension', '하체'], ['벤치 레그익스텐션', 'bench leg extension', '하체'],
+  ['레그킥', 'leg kick', '하체'], ['파워 레그프레스', 'power leg press', '하체'],
+  ['이너타이&아웃타이', 'inner thigh & outer thigh', '하체'], ['고블릿 스쿼트', 'goblet squat', '하체'],
+  ['TRX 스쿼트', 'TRX squat', '하체'], ['카프레이즈', 'calf raise', '하체'],
+  ['펙덱플라이', 'pec deck fly', '가슴'], ['벤치프레스', 'bench press', '가슴'],
+  ['덤벨 인클라인 벤치프레스', 'dumbbell incline bench press', '가슴'], ['덤벨 플라이', 'dumbbell fly', '가슴'],
+  ['오버헤드프레스', 'overhead press', '어깨'], ['덤벨 숄더프레스', 'dumbbell shoulder press', '어깨'],
+  ['사이드 레이즈', 'side raise', '어깨'], ['벤트오버 래터럴 레이즈', 'bent over lateral raise', '어깨'],
+  ['덤벨 오버헤드 익스텐션', 'dumbbell overhead extension', '팔'], ['케이블 푸시다운', 'cable push down', '팔'],
+  ['리버스 원핸드 푸시다운', 'reverse one hand push down', '팔'], ['덤벨 트라이셉스 익스텐션', 'dumbbell triceps extension', '팔'],
+  ['케이블 오버헤드 익스텐션', 'cable overhead extension', '팔'], ['덤벨 킥백', 'dumbbell kickback', '팔'],
+  ['케이블컬', 'cable curl', '팔'], ['이지바컬', 'easy bar curl', '팔'], ['인클라인 덤벨컬', 'incline dumbbell curl', '팔'],
+  ['밴드 스트레칭', 'band stretching', '스트레칭'], ['햄스트링 스트레칭', 'hamstring stretching', '스트레칭'],
+  ['흉추 스트레칭', 'thoracic stretching', '스트레칭'],
+];
