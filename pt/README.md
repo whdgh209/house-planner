@@ -51,6 +51,9 @@
 | `core.js` | 화면들이 함께 쓰는 저장·공유·도우미 |
 | `m.html`, `m.js` | 회원 보기 페이지 (읽기 전용) |
 | `store.js` | 저장소 (Firestore / 체험 모드) |
+| `growth-view.js`, `charts.js` | 성장 그래프 (트레이너 앱·회원 페이지 공용) |
+| `sigpad.js` | 손가락 서명 패드 |
+| `ics.js` | 구글 캘린더 내보내기(.ics) 파일 읽기 |
 | `logic.js` | 날짜, 계약, 잔여 회차, 공휴일 계산 (공휴일은 매년 추가) |
 | `kakao.js` | 카톡 문구 만들기, 카톡 기록 읽기 |
 | `exercises.js` | 종목 사전 초기값 |

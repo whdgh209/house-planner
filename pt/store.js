@@ -1,7 +1,7 @@
 // 데이터 저장소: Firebase가 설정되면 Firestore, 아니면 브라우저(localStorage) 체험 모드
 import { firebaseConfig, TRAINER_EMAILS } from './firebase-config.js';
 
-export const COLS = ['gyms', 'members', 'contracts', 'sessions', 'events', 'exercises', 'settings'];
+export const COLS = ['gyms', 'members', 'contracts', 'sessions', 'events', 'bodies', 'exercises', 'settings'];
 const LOCAL_KEY = 'pt-note-demo';
 const FB = 'https://www.gstatic.com/firebasejs/10.12.2/';
 

@@ -116,14 +116,17 @@ gyms/{id}        name, color, account, active
 members/{id}     name, gymId, gender, birth, phone, unit, status(active|ended)
                  goals[], experience, medical, pain, lifestyle, wishes, memo   ← 상담일지 항목
                  share: { enabled, token }
-contracts/{id}   memberId, type(new|renew), start, end, count, price, agreed{…}, memo
+contracts/{id}   memberId, type(new|renew), start, end, count, price, agreed{…}, memo, trainerSign, memberSign
 sessions/{id}    memberId, date, time, duration, status(booked|done|noshow), seriesId(반복 예약)
-                 title, memo(트레이너 전용)
+                 title, memo(트레이너 전용), trainerSign, memberSign(서명 이미지)
                  exercises: [{ name, nameEn, note, sets: [{kg, reps}] }]
 events/{id}      kind(general|off), date, time, duration, title, memo   ← 개인 일정·휴무
+bodies/{id}      memberId, date, weight, muscle, fat, memo              ← 체중·체성분
 exercises/{id}   name, nameEn, part, defaultNote, fav
-settings/main    closing("입니다" 붙이기), daysPerSession(1회당 일수), workStart, workEnd, offDays, duration
-shares/{token}   회원 공개용 사본: name, gym, total, remaining, start, end, next(다음 수업), sessions[]
+settings/main    closing("입니다" 붙이기), daysPerSession(1회당 일수), workStart, workEnd, offDays, duration,
+                 trainerName, trainerSign(자동 입력되는 트레이너 서명)
+shares/{token}   회원 공개용 사본: name, gym, total, remaining, start, end, next(다음 수업), sessions[],
+                 bodies[](공유 설정에서 켠 경우만). 서명·연락처·상담 내용은 들어가지 않음
 ```
 
 핵심 설계:
@@ -173,11 +176,11 @@ match /{doc=**} {
 | 나의 운동(자주 쓰는 운동, 즐겨찾기) | ✅ 1단계 | 종목 사전 ★ 즐겨찾기, 자주 쓴 종목 빠른 추가, 지난 수업 불러오기 |
 | 일지 피드(검색, 회원별 모아보기) | ✅ 1단계 | 일지 탭: 회원·종목·메모 검색, 센터별 필터 |
 | My 수업기록(총 수업, 월평균, 월별 현황) | ✅ 1단계 | 홈 수업 현황: 월별 막대를 센터별 색으로 구분 (센터 정산용) |
-| 운동량(볼륨) 흐름 | 🔶 일부 | 수업별 총 볼륨 표시. 주간 그래프는 3단계 |
+| 운동량(볼륨) 흐름 | ✅ 3단계 | 종목별 최고 무게 그래프, 수업별 운동량 막대 (회원 페이지에도 표시) |
 | 스케줄(수업, 변경, OFF, 노쇼 색 구분) | ✅ 2단계 | 예약·완료·불참·개인·휴무를 구분해 표시. 센터별 색상 |
 | 근무시간 설정, 시간 막기 | ✅ 2단계 | 근무 시간·쉬는 요일 설정. 밖에 예약하면 경고 |
 | 회원 수업 신청·변경 | ⏸ 보류 | 회원 로그인이 필요. 지금은 카톡으로 조율 |
-| 눈바디(사진 비교) | ⏸ 보류 | 사진 저장소는 유료 요금제가 필요. 대신 3단계에 체중·체성분 숫자 기록 |
+| 눈바디(사진 비교) | 🔶 대체 | 사진 저장소는 유료 요금제가 필요해서 체중·골격근량·체지방률 기록과 그래프로 대체 |
 | 채팅, 푸시 알림 | ✖ 제외 | 카톡으로 대체 |
 
 ## 8. 개발 단계
@@ -186,4 +189,4 @@ match /{doc=**} {
 |---|---|---|
 | **1단계 ✅** | 센터·회원·상담 관리, 계약(회차·기간 자동 계산), 운동일지(세트·kg), 종목 사전·즐겨찾기, 카톡 문구 생성, 카톡 기록 가져오기, 회원 공유 링크, 일지 피드, 월별 수업 현황 | 카톡 보내기가 편해지고 회원이 기록을 볼 수 있음 |
 | **2단계 ✅** | 캘린더(주간·월간, 반복 예약, 센터 색상, 근무시간·휴무·공휴일), 겹침·계약 기간 경고, 예약에서 일지로 연결, 기록 안 한 수업 알림, 회원 페이지에 다음 수업 표시 | 구글 캘린더와 삼성노트를 대체 |
-| **3단계** | 전자서명, 종목별 무게·볼륨 성장 그래프, 체중·체성분 기록, (선택) 구글 캘린더 연동 | 완성도 향상 |
+| **3단계 ✅** | 전자서명(수업·계약), 종이 양식과 같은 세션카드 인쇄·PDF, 종목별 무게·운동량 그래프, 체중·체성분 기록, 구글 캘린더(.ics) 가져오기 | 완성도 향상 |

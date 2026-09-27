@@ -1,5 +1,5 @@
 // 네트워크 우선, 오프라인이면 캐시로 화면 열기
-const CACHE = 'pt-note-v2';
+const CACHE = 'pt-note-v3';
 self.addEventListener('install', () => self.skipWaiting());
 self.addEventListener('activate', e => e.waitUntil(self.clients.claim()));
 self.addEventListener('fetch', e => {

@@ -100,3 +100,29 @@ export const HOLIDAYS = {
   '2027-10-04': '대체공휴일', '2027-10-09': '한글날', '2027-10-11': '대체공휴일', '2027-12-25': '성탄절',
   '2027-12-27': '대체공휴일',
 };
+
+// ---------- 성장 기록 ----------
+const kgOf = x => Number(x?.kg) || 0;
+export const sessionVolume = s => (s.exercises || []).reduce((t, e) => t + (e.sets || []).reduce((u, x) => u + kgOf(x) * (Number(x.reps) || 0), 0), 0);
+
+// 종목별 그날 최고 무게: [{name, pts:[{date, y, reps}]}] (기록 많은 순)
+export function exerciseProgress(sessions) {
+  const byName = new Map();
+  for (const s of sessions) {
+    if (s.status !== 'done') continue;
+    for (const e of s.exercises || []) {
+      const withKg = (e.sets || []).filter(x => kgOf(x) > 0);
+      if (!withKg.length) continue;
+      const best = withKg.reduce((a, b) => (kgOf(b) > kgOf(a) || (kgOf(b) === kgOf(a) && +b.reps > +a.reps) ? b : a));
+      const pts = byName.get(e.name) || [];
+      const same = pts.find(p => p.date === s.date);
+      if (same) { if (kgOf(best) > same.y) Object.assign(same, { y: kgOf(best), reps: best.reps }); }
+      else pts.push({ date: s.date, y: kgOf(best), reps: best.reps });
+      byName.set(e.name, pts);
+    }
+  }
+  return [...byName].map(([name, pts]) => ({ name, pts: pts.sort((a, b) => a.date.localeCompare(b.date)) }))
+    .sort((a, b) => b.pts.length - a.pts.length || a.name.localeCompare(b.name, 'ko'));
+}
+
+export const BODY_METRICS = [['weight', '체중', 'kg'], ['muscle', '골격근량', 'kg'], ['fat', '체지방률', '%']];

@@ -7,6 +7,10 @@ import {
 } from './core.js';
 import { calendarEnter, bookingForm, eventForm } from './calendar.js';
 import { COLS } from './store.js';
+import { sigPad } from './sigpad.js';
+import { bindChartTips } from './charts.js';
+import { progressHtml, volumeHtml, bodyChartsHtml } from './growth-view.js';
+import { parseIcs, matchMember } from './ics.js';
 
 let authState = 'loading', authUser = null;
 
@@ -184,7 +188,7 @@ function memberDetail(id, tab = 'summary') {
   const logs = md.sessions.filter(s => s.status !== 'booked');
   const upcoming = md.sessions.filter(s => s.status === 'booked').sort((a, b) => a.date.localeCompare(b.date) || L.toMin(a.time) - L.toMin(b.time));
   const next = L.nextBooking(md.sessions);
-  const tabs = [['summary', '요약'], ['sessions', `운동일지 ${logs.length || ''}`], ['contracts', '계약'], ['share', '공유']];
+  const tabs = [['summary', '요약'], ['sessions', `일지 ${logs.length || ''}`], ['growth', '성장'], ['contracts', '계약'], ['share', '공유']];
   const upcomingHtml = upcoming.length ? `<h2>예정된 수업 (${upcoming.length})</h2><div class="card">${upcoming.map(s => `<a class="between" href="#/b/${s.id}" style="color:inherit;padding:5px 0">
       <span>${esc(L.dateLabel(s.date))} ${esc(s.time || '')}</span>${L.isOverdue(s) ? '<span class="badge warn">기록 필요</span>' : '<span class="muted">›</span>'}</a>`).join('')}</div>` : '';
   let body = '';
@@ -212,25 +216,45 @@ function memberDetail(id, tab = 'summary') {
     body = `<div class="btns"><a class="btn primary" href="#/m/${id}/s/new">＋ 수업 기록</a><a class="btn" href="#/m/${id}/import">카톡 기록 가져오기</a></div>
       ${upcomingHtml}${upcoming.length ? '<h2>운동일지</h2>' : ''}
       ${logs.slice().reverse().map(s => sessionCard(s)).join('') || '<p class="empty">운동일지가 없어요</p>'}`;
+  } else if (tab === 'growth') {
+    const bodies = list('bodies').filter(b => b.memberId === id).sort((a, b) => b.date.localeCompare(a.date));
+    const prog = progressHtml(md.sessions, ui.growthEx?.[id]);
+    const numIn = (idName, label, unit) => `<div><label class="f">${label} (${unit})</label><input id="${idName}" type="number" inputmode="decimal" step="0.1"></div>`;
+    body = `<h2>종목별 무게</h2>${prog.html}${volumeHtml(md.sessions)}
+      <h2>체중·체성분</h2>
+      <div class="card">
+        <div class="grid2">
+          <div><label class="f">측정일</label><input id="bdate" type="date" value="${L.today()}"></div>
+          ${numIn('bweight', '체중', 'kg')}${numIn('bmuscle', '골격근량', 'kg')}${numIn('bfat', '체지방률', '%')}
+        </div>
+        <label class="f">메모</label><input id="bmemo" placeholder="예: 인바디 측정, 공복">
+        <div class="btns" style="margin-bottom:0"><button class="btn primary" id="addBody">기록 추가</button></div>
+      </div>
+      ${bodyChartsHtml(bodies)}
+      ${bodies.length ? `<div class="card">${bodies.map(b => `<div class="between" style="padding:5px 0">
+        <span><b>${esc(L.shortDate(b.date))}</b> <span class="muted small">${L.BODY_METRICS.filter(([k]) => b[k] != null).map(([k, n, u]) => `${n} ${b[k]}${u}`).join(' · ')}${b.memo ? ` · ${esc(b.memo)}` : ''}</span></span>
+        <button class="btn ghost sm" data-bid="${b.id}" aria-label="삭제">✕</button></div>`).join('')}</div>` : ''}`;
   } else if (tab === 'contracts') {
     body = `<a class="btn primary block" href="#/m/${id}/c/new">＋ ${md.contracts.length ? '재등록' : '신규 계약'}</a><div style="height:10px"></div>
       ${md.contracts.slice().reverse().map(c => {
         const used = md.usage.get(c.id).length;
-        return `<a class="card link" href="#/m/${id}/c/${c.id}">
+        return `<div class="card"><a href="#/m/${id}/c/${c.id}" style="color:inherit;display:block">
           <div class="between"><b>${c.type === 'renew' ? '재등록' : '신규'} · ${c.count}회</b><span class="badge ${c === st.contract ? '' : 'gray'}">${used}/${c.count} 사용</span></div>
-          <div class="muted">${esc(c.start)} ~ ${esc(c.end)}${c.price ? ` · ${Number(c.price).toLocaleString()}원` : ''}</div></a>`;
+          <div class="muted">${esc(c.start)} ~ ${esc(c.end)}${c.price ? ` · ${Number(c.price).toLocaleString()}원` : ''}${c.memberSign ? ' · 서명 ✓' : ''}</div></a>
+          <div class="btns" style="margin-bottom:0"><a class="btn sm" href="#/m/${id}/card/${c.id}">세션카드 보기 · 인쇄</a></div></div>`;
       }).join('') || '<p class="empty">계약이 없어요</p>'}`;
   } else if (tab === 'share') {
     const url = shareUrl(m);
     body = `<div class="card">
         <label class="switch"><span><b>회원에게 운동일지 공유</b><br><span class="muted small">링크를 받은 회원이 로그인 없이 본인 기록을 볼 수 있어요</span></span>
           <input type="checkbox" id="shareOn" ${m.share?.enabled ? 'checked' : ''}></label>
+        ${m.share?.enabled ? `<label class="switch"><span>체중·체성분도 보여주기</span><input type="checkbox" id="shareBody" ${m.share.body ? 'checked' : ''}></label>` : ''}
       </div>
       ${url ? `<div class="card"><div class="muted small">공유 링크</div><div style="word-break:break-all">${esc(url)}</div>
         <div class="btns"><button class="btn primary" id="sendLink">카톡으로 보내기</button><button class="btn" id="copyLink">복사</button></div>
         <button class="btn ghost small" id="regen">링크 새로 만들기 (이전 링크는 막힘)</button></div>` : ''}
-      <div class="card muted small">회원에게 보이는 것: 이름(성 제외), 잔여 회차, 계약 기간, 운동일지(종목·세트·메모)<br>
-        보이지 않는 것: 연락처, 주소, 상담 내용, 병력, 결제 금액, 트레이너 메모</div>`;
+      <div class="card muted small">회원에게 보이는 것: 이름(성 제외), 잔여 회차, 계약 기간, 다음 수업, 운동일지(종목·세트·메모), 무게 그래프${m.share?.body ? ', 체중·체성분' : ''}<br>
+        보이지 않는 것: 연락처, 주소, 상담 내용, 병력, 결제 금액, 서명, 트레이너 메모</div>`;
   }
 
   $app.innerHTML = `${header(m.name, { back: '#/members', right: `<span class="dot" style="background:${esc(gymColor(m))}"></span>` })}
@@ -240,13 +264,22 @@ function memberDetail(id, tab = 'summary') {
     save('members', { ...m, status: m.status === 'ended' ? 'active' : 'ended' });
     toast(m.status === 'ended' ? '진행 중으로 바꿨어요' : '종료 회원으로 옮겼어요');
   });
+  $$('[data-ex]').forEach(c => c.onclick = () => { ui.growthEx = { ...ui.growthEx, [id]: c.dataset.ex }; memberDetail(id, 'growth'); });
+  $('#addBody')?.addEventListener('click', () => {
+    const rec = { id: newId(), memberId: id, date: val('bdate'), weight: num('bweight'), muscle: num('bmuscle'), fat: num('bfat'), memo: val('bmemo') };
+    if (!rec.date) return toast('측정일을 입력하세요');
+    if (rec.weight == null && rec.muscle == null && rec.fat == null) return toast('체중, 골격근량, 체지방률 중 하나는 입력하세요');
+    save('bodies', rec); toast('기록했어요');
+  });
+  $$('[data-bid]').forEach(b => b.onclick = () => { if (confirm('이 기록을 삭제할까요?')) remove('bodies', b.dataset.bid); });
+  $('#shareBody')?.addEventListener('change', e => save('members', { ...m, share: { ...m.share, body: e.target.checked } }));
   $('#shareOn')?.addEventListener('change', e => {
     if (e.target.checked) {
-      save('members', { ...m, share: { enabled: true, token: m.share?.token || newId(24) } });
+      save('members', { ...m, share: { ...m.share, enabled: true, token: m.share?.token || newId(24) } });
       toast('공유를 켰어요');
     } else {
       if (m.share?.token) store.delShare(m.share.token);
-      save('members', { ...m, share: { enabled: false, token: null } });
+      save('members', { ...m, share: { ...m.share, enabled: false, token: null } });
       toast('공유를 껐어요. 이전 링크는 더 이상 열리지 않아요');
     }
   });
@@ -256,7 +289,7 @@ function memberDetail(id, tab = 'summary') {
   $('#regen')?.addEventListener('click', () => {
     if (!confirm('새 링크를 만들면 이전 링크는 열리지 않아요. 계속할까요?')) return;
     store.delShare(m.share.token);
-    save('members', { ...m, share: { enabled: true, token: newId(24) } });
+    save('members', { ...m, share: { ...m.share, enabled: true, token: newId(24) } });
     toast('새 링크를 만들었어요');
   });
 }
@@ -344,9 +377,14 @@ function contractForm(mid, cid) {
     <label class="f">정책 동의 확인</label>
     <div class="checks">${POLICIES.map(([k, n]) => `<label><input type="checkbox" name="agree" value="${k}" ${c.agreed?.[k] || isNew ? 'checked' : ''}>${n}</label>`).join('')}</div>
     <label class="f">메모</label><input id="cmemo" value="${esc(c.memo)}" placeholder="예: 입금 확인 9/3">
+    <label class="f">회원 서명</label><div id="sigM"></div>
+    <label class="f">트레이너 서명</label><div id="sigT"></div>
     <div class="btns"><button class="btn primary" id="save">저장</button></div>
     ${isNew ? '' : '<button class="btn danger block" id="del">계약 삭제</button>'}`;
 
+  if (!c.trainerSign && isNew) c.trainerSign = s.trainerSign || '';
+  sigPad($('#sigM'), { value: c.memberSign, label: '회원 서명', onChange: v => { c.memberSign = v; } });
+  sigPad($('#sigT'), { value: c.trainerSign, label: '트레이너 서명', onChange: v => { c.trainerSign = v; } });
   const recalc = () => { if (!endTouched && val('start') && num('count')) $('#end').value = autoEnd(val('start'), num('count')); };
   $('#start').oninput = recalc; $('#count').oninput = recalc;
   $('#end').oninput = () => { endTouched = true; };
@@ -405,10 +443,15 @@ function sessionForm(mid, sid) {
     <div id="exs"></div>
     <button class="btn block" id="addEx">＋ 종목 추가</button>
     <label class="f">트레이너 메모 (회원에게 안 보임)</label><textarea id="memo" placeholder="컨디션, 다음 수업 계획 등">${esc(draft.memo)}</textarea>
+    <label class="f">회원 서명 (강습 완료 확인)</label><div id="sigM"></div>
+    <label class="f">트레이너 서명</label><div id="sigT"></div>
     <div class="btns"><button class="btn" id="saveOnly">저장</button><button class="btn primary" id="saveSend">저장 후 카톡 보내기</button></div>
     ${isNew ? '' : '<button class="btn danger block" id="del">운동일지 삭제</button>'}
     <datalist id="exlist">${list('exercises').sort(byName).map(e => `<option value="${esc(e.name)}">${esc(e.nameEn || '')}</option>`).join('')}</datalist>`;
   $('#status').value = draft.status;
+  if (!draft.trainerSign && (isNew || src.status === 'booked')) draft.trainerSign = settings().trainerSign || '';
+  sigPad($('#sigM'), { value: draft.memberSign, label: '회원 서명', onChange: v => { draft.memberSign = v; } });
+  sigPad($('#sigT'), { value: draft.trainerSign, label: '트레이너 서명', onChange: v => { draft.trainerSign = v; } });
 
   const updateNo = () => {
     const date = val('date');
@@ -548,6 +591,93 @@ function importForm(mid) {
   };
 }
 
+// 종이 세션카드와 같은 모양 (인쇄·PDF 저장용)
+function sessionCardPage(mid, cid) {
+  const m = db().members.get(mid), c = db().contracts.get(cid);
+  if (!m || !c) return memberDetail(mid, 'contracts');
+  const used = L.memberData(db(), mid).usage.get(cid);
+  const s = settings();
+  const img = src => (src ? `<img src="${src}" alt="서명">` : '');
+  const rows = [...Array(Math.max(c.count, used.length))].map((_, i) => {
+    const x = used[i];
+    const training = !x ? '' : x.status === 'noshow' ? '불참 (차감)' : (x.exercises || []).map(e => e.name).join(', ');
+    return `<tr><td>${i + 1} SESSION</td><td>${x ? esc(L.shortDate(x.date)) : ''}</td><td class="tr">${esc(training)}</td><td>${img(x?.trainerSign)}</td><td>${img(x?.memberSign)}</td></tr>`;
+  }).join('');
+  $app.innerHTML = `${header(`${m.name} · 세션카드`, { back: `#/m/${mid}/contracts` })}
+    <div class="btns noprint"><button class="btn primary" id="print">인쇄 · PDF로 저장</button></div>
+    <div class="paper">
+      <h1>SESSION CARD</h1>
+      <table class="info">
+        <tr><th>트레이너</th><td>${esc(s.trainerName || '')}</td><th>회원명</th><td>${esc(m.name)}</td></tr>
+        <tr><th>운동목적</th><td>${esc((m.goals || []).join(', '))}</td><th>H/P</th><td>${esc(m.phone || '')}</td></tr>
+        <tr><th>계약</th><td colspan="3">${c.type === 'renew' ? '재등록' : '신규'} ${c.count}회 · ${esc(c.start)} ~ ${esc(c.end)}</td></tr>
+      </table>
+      <table class="grid"><thead><tr><th>SESSION</th><th>월/일</th><th>TRAINING</th><th>Trainer sign</th><th>회원서명</th></tr></thead><tbody>${rows}</tbody></table>
+    </div>
+    <p class="muted small noprint">인쇄 화면에서 "PDF로 저장"을 고르면 파일로 보관할 수 있어요.</p>`;
+  $('#print').onclick = () => window.print();
+}
+
+function icsImport() {
+  const members = list('members').filter(m => m.status !== 'ended').sort(byName);
+  let rows = [], showAll = false;
+  $app.innerHTML = `${header('구글 캘린더 가져오기', { back: '#/settings' })}
+    <div class="card small">
+      <b>.ics 파일 받는 방법 (PC에서)</b>
+      <ol style="margin:6px 0;padding-left:20px">
+        <li>calendar.google.com → 오른쪽 위 톱니바퀴 → 설정</li>
+        <li>왼쪽 "가져오기/내보내기" → 내보내기 → zip 파일 받기</li>
+        <li>zip을 풀면 나오는 <b>.ics</b> 파일을 폰으로 옮겨서 아래에서 선택</li>
+      </ol>
+      <span class="muted">오늘부터 4개월 안의 일정만 가져와요. 일정 제목에 회원 이름이 있으면 그 회원 예약으로 연결돼요.</span>
+    </div>
+    <label class="btn primary block">.ics 파일 선택<input type="file" id="file" accept=".ics,text/calendar" hidden></label>
+    <div id="preview"></div>`;
+  const exists = new Set([
+    ...list('sessions').map(x => `${x.memberId}|${x.date}|${x.time}`),
+    ...list('events').map(x => `ev|${x.date}|${x.time}|${x.title}`),
+  ]);
+  const draw = () => {
+    if (!rows.length) { $('#preview').innerHTML = '<p class="empty">가져올 일정이 없어요</p>'; return; }
+    const shown = rows.filter(r => showAll || r.member);
+    const hidden = rows.length - shown.length;
+    $('#preview').innerHTML = `<h2>일정 ${rows.length}건 · 회원 연결 ${rows.filter(r => r.member).length}건</h2>
+      ${shown.map(r => `<div class="card row">
+        <div class="grow"><b>${esc(L.dateLabel(r.date))} ${esc(r.time || '종일')}</b>${r.dup ? ' <span class="badge warn">이미 있음</span>' : ''}
+          <div class="muted small">${esc(r.title)}${r.time ? ` · ${r.duration}분` : ''}</div></div>
+        <select data-i="${r.i}" style="width:130px">
+          <option value="">가져오지 않음</option><option value="ev" ${r.pick === 'ev' ? 'selected' : ''}>${r.allDay ? '휴무' : '개인 일정'}</option>
+          ${r.allDay ? '' : members.map(m => `<option value="${m.id}" ${r.pick === m.id ? 'selected' : ''}>${esc(m.name)}</option>`).join('')}
+        </select></div>`).join('')}
+      ${hidden ? `<button class="btn block" id="showAll">회원과 연결 안 된 일정 ${hidden}건 보기</button>` : ''}
+      <button class="btn primary block" id="doImport" style="margin-top:10px">선택한 일정 가져오기</button>`;
+    $$('#preview select').forEach(sel => sel.onchange = () => { rows[+sel.dataset.i].pick = sel.value; });
+    $('#showAll')?.addEventListener('click', () => { showAll = true; draw(); });
+    $('#doImport').onclick = () => {
+      let n = 0;
+      rows.filter(r => r.pick).forEach((r, k) => {
+        if (r.pick === 'ev') save('events', { id: newId(), kind: r.allDay ? 'off' : 'general', title: r.title, date: r.date, time: r.time, duration: r.duration, memo: '' });
+        else save('sessions', { id: newId(), memberId: r.pick, date: r.date, time: r.time, duration: r.duration, status: 'booked', exercises: [], createdAt: Date.now() + k });
+        n++;
+      });
+      toast(`${n}건을 가져왔어요`);
+      location.hash = '#/calendar';
+    };
+  };
+  $('#file').onchange = async e => {
+    const f = e.target.files[0];
+    if (!f) return;
+    try {
+      rows = parseIcs(await f.text()).map((r, i) => {
+        const member = r.allDay ? null : matchMember(r.title, members);
+        const dup = member ? exists.has(`${member.id}|${r.date}|${r.time}`) : exists.has(`ev|${r.date}|${r.time}|${r.title}`);
+        return { ...r, i, member, dup, pick: member && !dup ? member.id : '' };
+      });
+      draw();
+    } catch (err) { toast(`파일을 읽지 못했어요: ${err.message}`); }
+  };
+}
+
 function settingsPage() {
   const s = settings();
   const gyms = list('gyms');
@@ -555,6 +685,12 @@ function settingsPage() {
     <h2>센터 관리</h2>
     ${gyms.map(g => `<a class="card link row" href="#/g/${g.id}"><span class="dot" style="background:${esc(g.color)}"></span><span class="grow">${esc(g.name)}</span>${g.active === false ? '<span class="badge gray">종료</span>' : ''}<span class="muted">›</span></a>`).join('')}
     <a class="btn block" href="#/g/new">＋ 센터 추가</a>
+    <h2>트레이너</h2>
+    <div class="card">
+      <label class="f" style="margin-top:0">이름 (세션카드에 표시)</label><input id="tname" value="${esc(s.trainerName)}" placeholder="예: 이종열">
+      <label class="f">내 서명 (수업 기록·계약 때 자동으로 들어가요)</label><div id="mySig"></div>
+      <button class="btn primary sm" id="saveSig" hidden>서명 저장</button>
+    </div>
     <h2>수업 기록</h2>
     <a class="card link row" href="#/exercises"><span class="grow">종목 사전 · 즐겨찾기</span><span class="muted">${db().exercises.size}개 ›</span></a>
     <div class="card">
@@ -572,6 +708,7 @@ function settingsPage() {
       <div class="chips" id="offDays">${['월', '화', '수', '목', '금', '토', '일'].map((w, i) => `<button class="chip ${s.offDays.includes((i + 1) % 7) ? 'on' : ''}" data-wd="${(i + 1) % 7}">${w}</button>`).join('')}</div>
       <label class="f">기본 수업 시간</label><select id="dur">${[30, 40, 50, 60, 90].map(n => `<option value="${n}" ${n === s.duration ? 'selected' : ''}>${n}분</option>`).join('')}</select>
       <p class="muted small">근무 시간 밖이나 쉬는 요일에 예약하면 경고가 나와요. 특정 날짜 휴무는 캘린더 빈칸을 눌러 "휴무로 지정"하세요.</p>
+      <a class="btn block" href="#/import-ics">구글 캘린더에서 일정 가져오기</a>
     </div>
     <h2>데이터</h2>
     <div class="card">
@@ -595,6 +732,11 @@ function settingsPage() {
     cur.has(w) ? cur.delete(w) : cur.add(w);
     setS({ offDays: [...cur] }); c.classList.toggle('on');
   });
+  $('#tname').onchange = () => setS({ trainerName: val('tname') });
+  // 획마다 저장하면 화면이 다시 그려져 서명이 끊기므로 버튼으로 저장
+  let pendingSig = '';
+  sigPad($('#mySig'), { value: s.trainerSign, label: '내 서명', onChange: v => { pendingSig = v; $('#saveSig').hidden = false; } });
+  $('#saveSig').onclick = () => { setS({ trainerSign: pendingSig }); toast(pendingSig ? '서명을 저장했어요' : '서명을 지웠어요'); };
   $('#export').onclick = () => {
     const out = { app: 'pt-note', version: 1, exportedAt: new Date().toISOString() };
     for (const c of COLS) out[c] = list(c);
@@ -705,10 +847,12 @@ const routes = [
   [/^#\/m\/(\w+)\/s\/(\w+)\/send$/, sendPage, 'members'],
   [/^#\/m\/(\w+)\/s\/(\w+)$/, sessionForm, 'members', true],
   [/^#\/m\/(\w+)\/import$/, importForm, 'members', true],
-  [/^#\/m\/(\w+)(?:\/(summary|sessions|contracts|share))?$/, memberDetail, 'members'],
+  [/^#\/m\/(\w+)\/card\/(\w+)$/, sessionCardPage, 'members'],
+  [/^#\/m\/(\w+)(?:\/(summary|sessions|growth|contracts|share))?$/, memberDetail, 'members'],
   [/^#\/settings$/, settingsPage, 'settings'],
   [/^#\/g\/(\w+)$/, gymForm, 'settings', true],
   [/^#\/exercises$/, exercisesPage, 'settings'],
+  [/^#\/import-ics$/, icsImport, 'settings', true],
 ];
 
 function render(fromData = false) {
@@ -744,4 +888,5 @@ store.start(
 ).catch(e => { $app.innerHTML = `<p class="empty">시작하지 못했어요: ${esc(e.message)}</p>`; });
 window.addEventListener('hashchange', () => render());
 
+bindChartTips();
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});

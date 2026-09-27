@@ -159,3 +159,52 @@ pre.kakao { white-space: pre-wrap; background: #fee500; color: #191919; border-r
 
 .time-col { width: 46px; flex: none; font-weight: 700; font-variant-numeric: tabular-nums; display: flex; flex-direction: column; line-height: 1.2; }
 .time-col small { font-weight: 500; color: var(--sub); font-size: 11px; }
+
+/* ---------- 서명 ---------- */
+.sig { position: relative; background: #fff; border: 1px dashed var(--line); border-radius: 12px; overflow: hidden; }
+.sig canvas, .sig img { display: block; width: 100%; aspect-ratio: 600 / 220; touch-action: none; }
+.sig img { object-fit: contain; }
+.sig-clear { position: absolute; right: 4px; top: 4px; background: rgba(255,255,255,.85) !important; color: #555 !important; }
+.sig-hint { position: absolute; left: 0; right: 0; top: 50%; transform: translateY(-50%); text-align: center; color: #b3b9c6; pointer-events: none; font-size: 14px; }
+#saveSig { margin-top: 8px; }
+
+/* ---------- 차트 ---------- */
+.chart { margin: 8px 0 0; }
+.chart svg { width: 100%; height: auto; display: block; overflow: visible; }
+.chart .grid { stroke: var(--line); stroke-width: 1; }
+.chart .axis { fill: var(--sub); font-size: 10.5px; }
+.chart .line { fill: none; stroke: var(--primary); stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
+.chart .dotm { fill: var(--primary); stroke: var(--card); stroke-width: 2; }
+.chart .val { fill: var(--text); font-size: 11.5px; font-weight: 700; }
+.chart .bar { fill: color-mix(in srgb, var(--primary) 45%, var(--card)); }
+.chart .bar.cur { fill: var(--primary); }
+.chart .hit { fill: transparent; cursor: pointer; }
+.chart-table { font-size: 13px; color: var(--sub); margin-top: 4px; }
+.chart-table summary { cursor: pointer; }
+.chart-table table { width: 100%; border-collapse: collapse; margin-top: 4px; }
+.chart-table td, .chart-table th { padding: 3px 6px; border-bottom: 1px solid var(--line); text-align: left; color: var(--text); font-weight: 400; }
+.chart-tip { position: absolute; z-index: 60; pointer-events: none; opacity: 0; transition: opacity .1s; background: rgba(20,24,32,.92); color: #fff; font-size: 13px; padding: 5px 9px; border-radius: 8px; white-space: nowrap; }
+
+/* ---------- 세션카드 (종이 양식) ---------- */
+.paper { background: #fff; color: #111; padding: 16px 12px; border-radius: 8px; margin: 0 -8px; font-size: 13px; }
+.paper h1 { text-align: center; font-family: Georgia, "Times New Roman", serif; letter-spacing: 2px; font-size: 24px; margin: 0 0 10px; }
+.paper table { width: 100%; border-collapse: collapse; }
+.paper th, .paper td { border: 1px solid #333; padding: 4px 5px; text-align: left; vertical-align: middle; }
+.paper .info th { width: 18%; background: #f1f1f1; font-weight: 600; }
+.paper .grid { margin-top: 10px; }
+.paper .grid th { background: #a8e6cf; text-align: center; font-size: 12px; }
+.paper .grid td { height: 46px; text-align: center; }
+.paper .grid td.tr { text-align: left; font-size: 12px; }
+.paper .grid td img { max-width: 70px; max-height: 38px; display: block; margin: 0 auto; }
+.paper .grid th:nth-child(3) { width: 42%; }
+@media print {
+  @page { margin: 12mm; }
+  body { background: #fff; }
+  .bar, #tabs, .noprint, .banner, .fab, #toast { display: none !important; }
+  #app { padding: 0; max-width: none; }
+  .paper { margin: 0; padding: 0; }
+}
+.paper th, .paper .grid td:nth-child(-n+2) { white-space: nowrap; }
+.paper .info th { width: 1%; }
+.paper .grid td:first-child { font-size: 11px; }
+.paper .grid th { font-size: 11px; padding: 4px 3px; }

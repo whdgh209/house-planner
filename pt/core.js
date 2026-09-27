@@ -95,7 +95,7 @@ export function sessionCard(s, { showMember = false } = {}) {
       <div class="between">
         <div class="row">${showMember ? `<span class="dot" style="background:${esc(gymColor(m))}"></span><span class="name">${esc(m?.name || '(삭제된 회원)')}</span>` : ''}
           <b>${esc(L.dateLabel(s.date))}</b></div>
-        <div class="row">${s.status === 'noshow' ? '<span class="badge danger">불참</span>' : ''}${no ? `<span class="badge gray">${no}${total ? `/${total}` : ''}회차</span>` : ''}</div>
+        <div class="row">${s.memberSign ? '<span class="badge gray" title="회원 서명 완료">서명✓</span>' : ''}${s.status === 'noshow' ? '<span class="badge danger">불참</span>' : ''}${no ? `<span class="badge gray">${no}${total ? `/${total}` : ''}회차</span>` : ''}</div>
       </div>
       ${s.title ? `<div class="muted">${esc(s.title)}</div>` : ''}
       ${exerciseListHtml(s.exercises)}
@@ -122,6 +122,10 @@ export function syncShare(mid) {
       date: s.date, no: md.noOf.get(s.id) || null, status: s.status, title: s.title || '',
       exercises: (s.exercises || []).map(e => ({ name: e.name, nameEn: e.nameEn || '', note: e.note || '', sets: e.sets || [] })),
     })),
+    bodies: m.share.body
+      ? list('bodies').filter(b => b.memberId === mid).sort((a, b) => a.date.localeCompare(b.date))
+        .map(({ date, weight, muscle, fat }) => ({ date, weight, muscle, fat }))
+      : [],
     updatedAt: Date.now(),
   });
 }

@@ -2,6 +2,8 @@
 import { readShare } from './store.js';
 import { setsText, exerciseLabel } from './kakao.js';
 import { dateLabel, shortDate, diffDays, today, dday } from './logic.js';
+import { progressHtml, volumeHtml, bodyChartsHtml } from './growth-view.js';
+import { bindChartTips } from './charts.js';
 
 const $app = document.getElementById('app');
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -39,6 +41,8 @@ async function main() {
       <div class="muted" style="margin-top:6px">${esc(shortDate(d.start))} ~ ${esc(shortDate(d.end))}${daysLeft != null ? ` (${esc(daysLeft < 0 ? '기간 종료' : dday(daysLeft))})` : ''}</div>
       ${d.next && d.next.date >= today() ? `<div style="margin-top:6px">다음 수업 <b>${esc(dateLabel(d.next.date))} ${esc(d.next.time)}</b></div>` : ''}
     </div>` : ''}
+    <div id="growth"></div>
+    <h2>운동일지</h2>
     <input class="search" id="q" type="search" placeholder="종목 검색 (예: 랫풀다운)">
     <div id="list"></div>
     <p class="muted small" style="text-align:center">${d.gym ? esc(d.gym) + ' · ' : ''}마지막 업데이트 ${esc(new Date(d.updatedAt).toLocaleDateString('ko-KR'))}<br>
@@ -50,6 +54,20 @@ async function main() {
   };
   document.getElementById('q').oninput = draw;
   draw();
+
+  // 성장 기록: 종목별 무게, 수업별 운동량, 체중·체성분
+  const asc = (d.sessions || []).slice().reverse();
+  let selected = null;
+  const drawGrowth = () => {
+    const prog = progressHtml(asc, selected);
+    selected = prog.selected;
+    const extra = volumeHtml(asc) + bodyChartsHtml(d.bodies || []);
+    const box = document.getElementById('growth');
+    box.innerHTML = prog.selected || extra ? `<h2>성장 기록</h2>${prog.selected ? prog.html : ''}${extra}` : '';
+    box.querySelectorAll('[data-ex]').forEach(c => c.onclick = () => { selected = c.dataset.ex; drawGrowth(); });
+  };
+  drawGrowth();
+  bindChartTips();
 }
 
 function fail() {
